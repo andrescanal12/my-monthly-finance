@@ -1,23 +1,32 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
+// ── FAMILY ID ─────────────────────────────────────────────
+// Shared identifier for all household data. No login needed.
+const FAMILY_ID = "canal-family";
+const YEAR = 2026;
+
+// ── TYPES ─────────────────────────────────────────────────
 export type CategoryId = "comida" | "transporte" | "ocio" | "vivienda" | "educacion" | "otros";
 
 export const CATEGORY_COLORS: Record<CategoryId, string> = {
-  comida: "#38bdf8",
+  comida:     "#38bdf8",
   transporte: "#818cf8",
-  ocio: "#c084fc",
-  vivienda: "#f472b6",
-  educacion: "#fbbf24",
-  otros: "#9ca3af",
+  ocio:       "#c084fc",
+  vivienda:   "#f472b6",
+  educacion:  "#fbbf24",
+  otros:      "#9ca3af",
 };
 
 export const CATEGORY_LABELS: Record<CategoryId, string> = {
-  comida: "Comida",
+  comida:     "Comida",
   transporte: "Transporte",
-  ocio: "Ocio",
-  vivienda: "Vivienda",
-  educacion: "Educación",
-  otros: "Otros",
+  ocio:       "Ocio",
+  vivienda:   "Vivienda",
+  educacion:  "Educación",
+  otros:      "Otros",
 };
 
 export interface Expense {
@@ -29,158 +38,171 @@ export interface Expense {
   categoryId: CategoryId;
 }
 
-const DEFAULT_RECURRING: Omit<Expense, "id" | "paid">[] = [
-  { name: "Diezmo", amount: 190, isRecurring: true, categoryId: "otros" },
-  { name: "Alquiler", amount: 750, isRecurring: true, categoryId: "vivienda" },
-  { name: "Master", amount: 189, isRecurring: true, categoryId: "educacion" },
-  { name: "Suegrita Iris", amount: 70, isRecurring: true, categoryId: "otros" },
-  { name: "Internet", amount: 20, isRecurring: true, categoryId: "vivienda" },
-  { name: "Cuenta Google", amount: 5, isRecurring: true, categoryId: "ocio" },
-  { name: "Comida (En efectivo)", amount: 240, isRecurring: true, categoryId: "comida" },
-  { name: "Luz", amount: 50, isRecurring: true, categoryId: "vivienda" },
-  { name: "Cuota coche", amount: 228.15, isRecurring: true, categoryId: "transporte" },
-  { name: "Gasolina coche", amount: 70, isRecurring: true, categoryId: "transporte" },
-];
-
 export const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-type MonthData = {
-  income: number;
-  expenses: Expense[];
-};
-
-type YearData = Record<number, MonthData>;
-
-const STORAGE_KEY = "expenses-2026-v5";
-const DEFAULT_INCOME = 1955.15;
-
-function createId() {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function getDefaultMonthData(): MonthData {
-  return {
-    income: DEFAULT_INCOME,
-    expenses: DEFAULT_RECURRING.map((e) => ({
-      ...e,
-      id: createId(),
-      paid: false,
-    })),
-  };
-}
-
-function getInitialData(): YearData {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) return JSON.parse(saved);
-
-  // Build a fresh year with all 12 months pre-filled
-  const data: YearData = {};
-  for (let m = 0; m < 12; m++) {
-    data[m] = getDefaultMonthData();
-  }
-  return data;
-}
-
+// ── HOOK ──────────────────────────────────────────────────
 export function useExpenseData() {
-  const [yearData, setYearData] = useState<YearData>(getInitialData);
+  const queryClient = useQueryClient();
+
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
-    return now.getFullYear() === 2026 ? now.getMonth() : 0;
+    return now.getFullYear() === YEAR ? now.getMonth() : 0;
   });
 
-  const save = (data: YearData) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    setYearData(data);
+  // ── Fetch income ──────────────────────────────────────
+  const { data: income = 1955.15 } = useQuery<number>({
+    queryKey: ["income", selectedMonth],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("month_income")
+        .select("amount")
+        .eq("family_id", FAMILY_ID)
+        .eq("month_index", selectedMonth)
+        .eq("year", YEAR)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data?.amount ?? 1955.15;
+    },
+  });
+
+  // ── Fetch expenses ────────────────────────────────────
+  const { data: expenses = [], isLoading } = useQuery<Expense[]>({
+    queryKey: ["expenses", selectedMonth],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("family_id", FAMILY_ID)
+        .eq("month_index", selectedMonth)
+        .eq("year", YEAR)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((e) => ({
+        id:          e.id,
+        name:        e.name,
+        amount:      Number(e.amount),
+        paid:        e.paid,
+        isRecurring: e.is_recurring,
+        categoryId:  e.category_id as CategoryId,
+      }));
+    },
+  });
+
+  // ── Invalidate helpers ───────────────────────────────
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["expenses", selectedMonth] });
+    queryClient.invalidateQueries({ queryKey: ["income",   selectedMonth] });
   };
 
-  // If the month hasn't been initialised yet, seed it with defaults
-  const monthData = yearData[selectedMonth] ?? getDefaultMonthData();
+  // ── Mutations ────────────────────────────────────────
+  const addExpenseMut = useMutation({
+    mutationFn: async (vars: { name: string; amount: number; categoryId: CategoryId }) => {
+      const { error } = await supabase.from("expenses").insert([{
+        family_id:    FAMILY_ID,
+        name:         vars.name,
+        amount:       vars.amount,
+        category_id:  vars.categoryId,
+        month_index:  selectedMonth,
+        year:         YEAR,
+        paid:         false,
+        is_recurring: false,
+      }]);
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); toast.success("Gasto añadido"); },
+    onError:   (e: any) => toast.error(e.message),
+  });
 
-  const totalExpenses = monthData.expenses.reduce((s, e) => s + e.amount, 0);
-  const totalPaid = monthData.expenses.filter((e) => e.paid).reduce((s, e) => s + e.amount, 0);
-  const totalPending = totalExpenses - totalPaid;
-  const freeAmount = monthData.income - totalExpenses;
+  const removeExpenseMut = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("expenses").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); toast.success("Gasto eliminado"); },
+    onError:   (e: any) => toast.error(e.message),
+  });
 
-  const expensesByCategory = Object.keys(CATEGORY_LABELS).map((catKey) => {
-    const id = catKey as CategoryId;
-    const catExpenses = monthData.expenses.filter((e) => e.categoryId === id);
-    const total = catExpenses.reduce((s, e) => s + e.amount, 0);
-    return {
-      id,
-      label: CATEGORY_LABELS[id],
-      color: CATEGORY_COLORS[id],
-      total,
-      percentage: totalExpenses > 0 ? Math.round((total / totalExpenses) * 100) : 0,
-    };
-  }).filter((c) => c.total > 0).sort((a, b) => b.total - a.total);
+  const togglePaidMut = useMutation({
+    mutationFn: async (vars: { id: string; paid: boolean }) => {
+      const { error } = await supabase
+        .from("expenses")
+        .update({ paid: !vars.paid })
+        .eq("id", vars.id);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(),
+    onError:   (e: any) => toast.error(e.message),
+  });
 
-  const togglePaid = (id: string) => {
-    const newData = { ...yearData };
-    newData[selectedMonth] = {
-      ...monthData,
-      expenses: monthData.expenses.map((e) =>
-        e.id === id ? { ...e, paid: !e.paid } : e
-      ),
-    };
-    save(newData);
-  };
+  const updateExpenseMut = useMutation({
+    mutationFn: async (vars: { id: string; name: string; amount: number }) => {
+      const { error } = await supabase
+        .from("expenses")
+        .update({ name: vars.name, amount: vars.amount })
+        .eq("id", vars.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); toast.success("Gasto actualizado"); },
+    onError:   (e: any) => toast.error(e.message),
+  });
 
-  const addExpense = (name: string, amount: number, categoryId: CategoryId = "otros") => {
-    const newData = { ...yearData };
-    newData[selectedMonth] = {
-      ...monthData,
-      expenses: [
-        ...monthData.expenses,
-        { id: createId(), name, amount, paid: false, isRecurring: false, categoryId },
-      ],
-    };
-    save(newData);
-  };
+  const setIncomeMut = useMutation({
+    mutationFn: async (amount: number) => {
+      const { error } = await supabase.from("month_income").upsert(
+        { family_id: FAMILY_ID, month_index: selectedMonth, year: YEAR, amount },
+        { onConflict: "family_id, month_index, year" }
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); toast.success("Ingresos actualizados"); },
+    onError:   (e: any) => toast.error(e.message),
+  });
 
-  const removeExpense = (id: string) => {
-    const newData = { ...yearData };
-    newData[selectedMonth] = {
-      ...monthData,
-      expenses: monthData.expenses.filter((e) => e.id !== id),
-    };
-    save(newData);
-  };
+  // ── Derived values ────────────────────────────────────
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalPaid     = expenses.filter((e) => e.paid).reduce((s, e) => s + e.amount, 0);
+  const totalPending  = totalExpenses - totalPaid;
+  const freeAmount    = income - totalExpenses;
 
-  const setIncome = (income: number) => {
-    const newData = { ...yearData };
-    newData[selectedMonth] = { ...monthData, income };
-    save(newData);
-  };
-
-  const updateExpense = (id: string, name: string, amount: number) => {
-    const newData = { ...yearData };
-    newData[selectedMonth] = {
-      ...monthData,
-      expenses: monthData.expenses.map((e) =>
-        e.id === id ? { ...e, name, amount } : e
-      ),
-    };
-    save(newData);
-  };
+  const expensesByCategory = (Object.keys(CATEGORY_LABELS) as CategoryId[])
+    .map((id) => {
+      const catExpenses = expenses.filter((e) => e.categoryId === id);
+      const total = catExpenses.reduce((s, e) => s + e.amount, 0);
+      return {
+        id,
+        label:      CATEGORY_LABELS[id],
+        color:      CATEGORY_COLORS[id],
+        total,
+        percentage: totalExpenses > 0 ? Math.round((total / totalExpenses) * 100) : 0,
+      };
+    })
+    .filter((c) => c.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   return {
     selectedMonth,
     setSelectedMonth,
-    monthData,
+    monthData: { income, expenses },
     monthName: MONTHS[selectedMonth],
+    isLoading,
     totalExpenses,
     totalPaid,
     totalPending,
     freeAmount,
     expensesByCategory,
-    togglePaid,
-    addExpense,
-    removeExpense,
-    updateExpense,
-    setIncome,
+    togglePaid:    (id: string) => {
+      const e = expenses.find((x) => x.id === id);
+      if (e) togglePaidMut.mutate({ id, paid: e.paid });
+    },
+    addExpense:    (name: string, amount: number, categoryId: CategoryId = "otros") =>
+      addExpenseMut.mutate({ name, amount, categoryId }),
+    removeExpense: (id: string) => removeExpenseMut.mutate(id),
+    updateExpense: (id: string, name: string, amount: number) =>
+      updateExpenseMut.mutate({ id, name, amount }),
+    setIncome:     (amount: number) => setIncomeMut.mutate(amount),
     MONTHS,
   };
 }
