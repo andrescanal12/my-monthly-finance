@@ -12,7 +12,7 @@ export default function ProgressRing({ paid, total }: ProgressRingProps) {
   const strokeDashoffset = circumference - (pct / 100) * circumference;
 
   return (
-    <div className="relative w-36 h-36 flex items-center justify-center">
+    <div className="relative w-36 h-36 flex items-center justify-center neon-ring">
       {/* Glow behind */}
       <div className="absolute inset-2 rounded-full bg-foreground/[0.02] blur-xl" />
       <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
