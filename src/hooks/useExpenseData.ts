@@ -3,12 +3,12 @@ import { useState } from "react";
 export type CategoryId = "comida" | "transporte" | "ocio" | "vivienda" | "educacion" | "otros";
 
 export const CATEGORY_COLORS: Record<CategoryId, string> = {
-  comida: "#38bdf8", // cyan
-  transporte: "#818cf8", // indigo-ish
-  ocio: "#c084fc", // purple
-  vivienda: "#f472b6", // pink
-  educacion: "#fbbf24", // amber
-  otros: "#9ca3af", // gray
+  comida: "#38bdf8",
+  transporte: "#818cf8",
+  ocio: "#c084fc",
+  vivienda: "#f472b6",
+  educacion: "#fbbf24",
+  otros: "#9ca3af",
 };
 
 export const CATEGORY_LABELS: Record<CategoryId, string> = {
@@ -42,7 +42,7 @@ const DEFAULT_RECURRING: Omit<Expense, "id" | "paid">[] = [
   { name: "Gasolina coche", amount: 70, isRecurring: true, categoryId: "transporte" },
 ];
 
-const MONTHS = [
+export const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
@@ -54,60 +54,32 @@ type MonthData = {
 
 type YearData = Record<number, MonthData>;
 
+const STORAGE_KEY = "expenses-2026-v5";
+const DEFAULT_INCOME = 1955.15;
+
 function createId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-// Maps keywords in expense names to category IDs
-const CATEGORY_KEYWORD_MAP: { keywords: string[]; categoryId: CategoryId }[] = [
-  { keywords: ["comida", "supermercado", "mercadona", "lidl", "aldi", "carrefour", "restaurante", "cena", "almuerzo", "efectivo"], categoryId: "comida" },
-  { keywords: ["coche", "gasolina", "transporte", "bus", "metro", "tren", "uber", "cabify", "cuota"], categoryId: "transporte" },
-  { keywords: ["netflix", "spotify", "ocio", "cine", "google", "amazon prime", "youtube", "gaming", "juego"], categoryId: "ocio" },
-  { keywords: ["alquiler", "hipoteca", "internet", "luz", "agua", "gas", "comunidad", "hogar", "seguro hogar"], categoryId: "vivienda" },
-  { keywords: ["master", "curso", "universidad", "libro", "formacion", "formación", "academia"], categoryId: "educacion" },
-  { keywords: ["diezmo", "suegrita", "familia", "regalo", "donacion", "donación"], categoryId: "otros" },
-];
-
-function guessCategoryId(name: string): CategoryId {
-  const lower = name.toLowerCase();
-  for (const rule of CATEGORY_KEYWORD_MAP) {
-    if (rule.keywords.some((kw) => lower.includes(kw))) {
-      return rule.categoryId;
-    }
-  }
-  return "otros";
+function getDefaultMonthData(): MonthData {
+  return {
+    income: DEFAULT_INCOME,
+    expenses: DEFAULT_RECURRING.map((e) => ({
+      ...e,
+      id: createId(),
+      paid: false,
+    })),
+  };
 }
 
 function getInitialData(): YearData {
-  const saved = localStorage.getItem("expenses-2026-v4");
+  const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) return JSON.parse(saved);
 
-  // Migrate from v3 if available
-  const savedV3 = localStorage.getItem("expenses-2026-v3");
-  if (savedV3) {
-    const parsed: YearData = JSON.parse(savedV3);
-    // Patch every expense that doesn't have a categoryId
-    for (const month of Object.keys(parsed)) {
-      parsed[+month].expenses = parsed[+month].expenses.map((e) => ({
-        ...e,
-        categoryId: e.categoryId ?? guessCategoryId(e.name),
-      }));
-    }
-    // Store migrated data
-    localStorage.setItem("expenses-2026-v4", JSON.stringify(parsed));
-    return parsed;
-  }
-  
+  // Build a fresh year with all 12 months pre-filled
   const data: YearData = {};
   for (let m = 0; m < 12; m++) {
-    data[m] = {
-      income: 1955.15,
-      expenses: DEFAULT_RECURRING.map((e) => ({
-        ...e,
-        id: createId(),
-        paid: false,
-      })),
-    };
+    data[m] = getDefaultMonthData();
   }
   return data;
 }
@@ -120,11 +92,13 @@ export function useExpenseData() {
   });
 
   const save = (data: YearData) => {
-    localStorage.setItem("expenses-2026-v4", JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     setYearData(data);
   };
 
-  const monthData = yearData[selectedMonth];
+  // If the month hasn't been initialised yet, seed it with defaults
+  const monthData = yearData[selectedMonth] ?? getDefaultMonthData();
+
   const totalExpenses = monthData.expenses.reduce((s, e) => s + e.amount, 0);
   const totalPaid = monthData.expenses.filter((e) => e.paid).reduce((s, e) => s + e.amount, 0);
   const totalPending = totalExpenses - totalPaid;

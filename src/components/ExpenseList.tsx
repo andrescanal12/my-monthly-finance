@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Trash2, RotateCcw, Pencil, X } from "lucide-react";
+import { Check, Trash2, RotateCcw, Pencil, X, AlertTriangle } from "lucide-react";
 import type { Expense } from "@/hooks/useExpenseData";
 
 interface ExpenseListProps {
@@ -18,6 +18,7 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editAmount, setEditAmount] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const startEditing = (expense: Expense) => {
     setEditingId(expense.id);
@@ -160,7 +161,7 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                       }`}>
                         {formatCurrency(expense.amount)}
                       </span>
-                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1">
                         <motion.button
                           whileTap={{ scale: 0.85 }}
                           onClick={() => startEditing(expense)}
@@ -168,10 +169,23 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                         >
                           <Pencil size={13} />
                         </motion.button>
-                        {!expense.isRecurring && (
+                        {confirmDeleteId === expense.id ? (
                           <motion.button
+                            key="confirm"
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
                             whileTap={{ scale: 0.85 }}
-                            onClick={() => onRemove(expense.id)}
+                            onClick={() => { onRemove(expense.id); setConfirmDeleteId(null); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[11px] font-semibold transition-all duration-200"
+                          >
+                            <AlertTriangle size={11} />
+                            Borrar
+                          </motion.button>
+                        ) : (
+                          <motion.button
+                            key="delete"
+                            whileTap={{ scale: 0.85 }}
+                            onClick={() => setConfirmDeleteId(expense.id)}
                             className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all duration-300"
                           >
                             <Trash2 size={13} />
