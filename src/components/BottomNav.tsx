@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, PieChart, CreditCard, User } from "lucide-react";
+import { LayoutDashboard, PieChart, CalendarDays } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function BottomNav() {
@@ -8,8 +8,7 @@ export default function BottomNav() {
   const navItems = [
     { path: "/", label: "Dashboard", Icon: LayoutDashboard },
     { path: "/analisis", label: "Análisis", Icon: PieChart },
-    { path: "/transacciones", label: "Transacciones", Icon: CreditCard },
-    { path: "/perfil", label: "Perfil", Icon: User },
+    { path: "/anual", label: "Anual", Icon: CalendarDays },
   ];
 
   return (

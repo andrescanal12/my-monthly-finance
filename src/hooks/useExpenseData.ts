@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
@@ -90,6 +90,31 @@ export function useExpenseData() {
       }));
     },
   });
+
+  // ── Realtime Subscription ───────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel("shared-updates")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "expenses" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["expenses", selectedMonth] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "month_income" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["income", selectedMonth] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedMonth, queryClient]);
 
   // ── Invalidate helpers ───────────────────────────────
   const invalidate = () => {
