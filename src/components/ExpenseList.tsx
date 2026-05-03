@@ -1,29 +1,70 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Trash2, RotateCcw, Pencil, X, AlertTriangle } from "lucide-react";
+import { Check, Trash2, RotateCcw, Pencil, X, AlertTriangle, CalendarClock } from "lucide-react";
 import type { Expense } from "@/hooks/useExpenseData";
 
 interface ExpenseListProps {
   expenses: Expense[];
   onTogglePaid: (id: string) => void;
   onRemove: (id: string) => void;
-  onUpdate: (id: string, name: string, amount: number) => void;
+  onUpdate: (id: string, name: string, amount: number, dueDay?: number | null) => void;
 }
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(n);
 }
 
+/** Devuelve el estado del vencimiento respecto al día actual del mes */
+function getDueDayStatus(dueDay: number): "urgent" | "soon" | "ok" {
+  const today = new Date().getDate();
+  const diff = dueDay - today;
+  if (diff < 0 || diff === 0) return "urgent";   // ya venció o es hoy
+  if (diff <= 3) return "soon";                    // vence en 3 días o menos
+  return "ok";
+}
+
+function DueDayBadge({ dueDay, paid }: { dueDay: number; paid: boolean }) {
+  if (paid) {
+    return (
+      <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground/40 bg-foreground/[0.04] rounded-full px-2 py-0.5">
+        <CalendarClock size={9} />
+        Día {dueDay}
+      </span>
+    );
+  }
+
+  const status = getDueDayStatus(dueDay);
+  const styles = {
+    urgent: "text-red-400 bg-red-500/10",
+    soon:   "text-amber-400 bg-amber-500/10",
+    ok:     "text-emerald-400 bg-emerald-500/10",
+  };
+  const labels = {
+    urgent: `Venció el día ${dueDay}`,
+    soon:   `Vence el día ${dueDay}`,
+    ok:     `Día ${dueDay}`,
+  };
+
+  return (
+    <span className={`flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 ${styles[status]}`}>
+      <CalendarClock size={9} />
+      {labels[status]}
+    </span>
+  );
+}
+
 export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate }: ExpenseListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editAmount, setEditAmount] = useState("");
+  const [editDueDay, setEditDueDay] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const startEditing = (expense: Expense) => {
     setEditingId(expense.id);
     setEditName(expense.name);
     setEditAmount(String(expense.amount));
+    setEditDueDay(expense.dueDay ? String(expense.dueDay) : "");
   };
 
   const cancelEditing = () => {
@@ -33,7 +74,8 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
   const handleUpdate = (id: string) => {
     const parsed = parseFloat(editAmount);
     if (editName.trim() && !isNaN(parsed) && parsed >= 0) {
-      onUpdate(id, editName.trim(), parsed);
+      const parsedDay = editDueDay ? parseInt(editDueDay, 10) : null;
+      onUpdate(id, editName.trim(), parsed, parsedDay);
     }
     setEditingId(null);
   };
@@ -85,6 +127,8 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                         placeholder="Ej. Alquiler"
                       />
                     </div>
+
+                    {/* Importe + Día vencimiento en fila */}
                     <div className="flex gap-2 items-end">
                       <div className="flex flex-col gap-2 flex-1">
                         <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold">
@@ -99,21 +143,45 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                           step="0.01"
                         />
                       </div>
-                      <motion.button 
+
+                      <div className="flex flex-col gap-2 w-24">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold flex items-center gap-1">
+                          <CalendarClock size={9} />
+                          Día
+                        </label>
+                        <input
+                          type="number"
+                          value={editDueDay}
+                          onChange={(e) => setEditDueDay(e.target.value)}
+                          className="liquid-glass-strong rounded-xl px-3 py-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-foreground/30 transition-all placeholder:text-muted-foreground/30 text-center"
+                          placeholder="—"
+                          min="1"
+                          max="31"
+                        />
+                      </div>
+
+                      <motion.button
                         whileTap={{ scale: 0.9 }}
                         onClick={() => handleUpdate(expense.id)}
                         className="h-[44px] px-5 rounded-xl bg-foreground text-background flex items-center justify-center font-medium hover:bg-foreground/90 transition-all shadow-lg"
                       >
                         <Check size={18} />
                       </motion.button>
-                      <motion.button 
+                      <motion.button
                         whileTap={{ scale: 0.9 }}
                         onClick={cancelEditing}
-                        className="h-[44px] px-5 rounded-xl bg-foreground/[0.08] text-foreground hover:bg-foreground/[0.15] flex items-center justify-center transition-all shadow-sm"
+                        className="h-[44px] px-4 rounded-xl bg-foreground/[0.08] text-foreground hover:bg-foreground/[0.15] flex items-center justify-center transition-all shadow-sm"
                       >
                         <X size={18} strokeWidth={2.5} />
                       </motion.button>
                     </div>
+
+                    {editDueDay && (
+                      <p className="text-[11px] text-muted-foreground/60 ml-1 -mt-2 flex items-center gap-1">
+                        <CalendarClock size={10} />
+                        Vence el día <strong className="text-foreground/70">{editDueDay}</strong> de cada mes
+                      </p>
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div
@@ -122,77 +190,89 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="flex items-center justify-between"
+                    className="flex flex-col gap-2"
                   >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <motion.button
-                        whileTap={{ scale: 0.85 }}
-                        onClick={() => onTogglePaid(expense.id)}
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300 ${
-                          expense.paid
-                            ? "bg-foreground text-background"
-                            : "bg-foreground/[0.06] text-muted-foreground hover:bg-foreground/[0.12]"
-                        }`}
-                      >
-                        {expense.paid ? <Check size={13} strokeWidth={3} /> : <div className="w-2.5 h-2.5 rounded-sm border border-muted-foreground/40" />}
-                      </motion.button>
-                      
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <span 
-                          onClick={() => startEditing(expense)}
-                          className={`text-sm font-medium truncate cursor-pointer hover:text-foreground/80 transition-all duration-300 ${
-                          expense.paid ? "line-through text-muted-foreground" : "text-foreground"
-                        }`}>
-                          {expense.name}
-                        </span>
-                        {expense.isRecurring && (
-                          <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1 mt-0.5">
-                            <RotateCcw size={8} /> Recurrente
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 shrink-0 ml-4">
-                      <span 
-                        onClick={() => startEditing(expense)}
-                        className={`text-sm font-semibold tracking-[-0.3px] cursor-pointer hover:text-foreground/80 transition-all duration-300 ${
-                        expense.paid ? "text-muted-foreground" : "text-foreground"
-                      }`}>
-                        {formatCurrency(expense.amount)}
-                      </span>
-                      <div className="flex items-center gap-1">
+                    {/* Fila principal */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
                         <motion.button
                           whileTap={{ scale: 0.85 }}
-                          onClick={() => startEditing(expense)}
-                          className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-foreground/5 transition-all duration-300"
+                          onClick={() => onTogglePaid(expense.id)}
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300 ${
+                            expense.paid
+                              ? "bg-foreground text-background"
+                              : "bg-foreground/[0.06] text-muted-foreground hover:bg-foreground/[0.12]"
+                          }`}
                         >
-                          <Pencil size={13} />
+                          {expense.paid ? <Check size={13} strokeWidth={3} /> : <div className="w-2.5 h-2.5 rounded-sm border border-muted-foreground/40" />}
                         </motion.button>
-                        {confirmDeleteId === expense.id ? (
-                          <motion.button
-                            key="confirm"
-                            initial={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            whileTap={{ scale: 0.85 }}
-                            onClick={() => { onRemove(expense.id); setConfirmDeleteId(null); }}
-                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[11px] font-semibold transition-all duration-200"
+
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span
+                            onClick={() => startEditing(expense)}
+                            className={`text-sm font-medium truncate cursor-pointer hover:text-foreground/80 transition-all duration-300 ${
+                              expense.paid ? "line-through text-muted-foreground" : "text-foreground"
+                            }`}
                           >
-                            <AlertTriangle size={11} />
-                            Borrar
-                          </motion.button>
-                        ) : (
+                            {expense.name}
+                          </span>
+                          {expense.isRecurring && (
+                            <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1 mt-0.5">
+                              <RotateCcw size={8} /> Recurrente
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 ml-4">
+                        <span
+                          onClick={() => startEditing(expense)}
+                          className={`text-sm font-semibold tracking-[-0.3px] cursor-pointer hover:text-foreground/80 transition-all duration-300 ${
+                            expense.paid ? "text-muted-foreground" : "text-foreground"
+                          }`}
+                        >
+                          {formatCurrency(expense.amount)}
+                        </span>
+                        <div className="flex items-center gap-1">
                           <motion.button
-                            key="delete"
                             whileTap={{ scale: 0.85 }}
-                            onClick={() => setConfirmDeleteId(expense.id)}
-                            className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all duration-300"
+                            onClick={() => startEditing(expense)}
+                            className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-foreground/5 transition-all duration-300"
                           >
-                            <Trash2 size={13} />
+                            <Pencil size={13} />
                           </motion.button>
-                        )}
+                          {confirmDeleteId === expense.id ? (
+                            <motion.button
+                              key="confirm"
+                              initial={{ scale: 0.8, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              whileTap={{ scale: 0.85 }}
+                              onClick={() => { onRemove(expense.id); setConfirmDeleteId(null); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[11px] font-semibold transition-all duration-200"
+                            >
+                              <AlertTriangle size={11} />
+                              Borrar
+                            </motion.button>
+                          ) : (
+                            <motion.button
+                              key="delete"
+                              whileTap={{ scale: 0.85 }}
+                              onClick={() => setConfirmDeleteId(expense.id)}
+                              className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all duration-300"
+                            >
+                              <Trash2 size={13} />
+                            </motion.button>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {/* Badge de vencimiento — solo si tiene día asignado */}
+                    {expense.dueDay && (
+                      <div className="ml-10">
+                        <DueDayBadge dueDay={expense.dueDay} paid={expense.paid} />
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

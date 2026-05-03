@@ -36,6 +36,7 @@ export interface Expense {
   paid: boolean;
   isRecurring: boolean;
   categoryId: CategoryId;
+  dueDay?: number; // día del mes en que vence el pago (1-31)
 }
 
 export const MONTHS = [
@@ -87,6 +88,7 @@ export function useExpenseData() {
         paid:        e.paid,
         isRecurring: e.is_recurring,
         categoryId:  e.category_id as CategoryId,
+        dueDay:      e.due_day ?? undefined,
       }));
     },
   });
@@ -124,7 +126,7 @@ export function useExpenseData() {
 
   // ── Mutations ────────────────────────────────────────
   const addExpenseMut = useMutation({
-    mutationFn: async (vars: { name: string; amount: number; categoryId: CategoryId }) => {
+    mutationFn: async (vars: { name: string; amount: number; categoryId: CategoryId; dueDay?: number }) => {
       const { error } = await supabase.from("expenses").insert([{
         family_id:    FAMILY_ID,
         name:         vars.name,
@@ -134,6 +136,7 @@ export function useExpenseData() {
         year:         YEAR,
         paid:         false,
         is_recurring: false,
+        due_day:      vars.dueDay ?? null,
       }]);
       if (error) throw error;
     },
@@ -163,10 +166,10 @@ export function useExpenseData() {
   });
 
   const updateExpenseMut = useMutation({
-    mutationFn: async (vars: { id: string; name: string; amount: number }) => {
+    mutationFn: async (vars: { id: string; name: string; amount: number; dueDay?: number | null }) => {
       const { error } = await supabase
         .from("expenses")
-        .update({ name: vars.name, amount: vars.amount })
+        .update({ name: vars.name, amount: vars.amount, due_day: vars.dueDay ?? null })
         .eq("id", vars.id);
       if (error) throw error;
     },
@@ -222,11 +225,11 @@ export function useExpenseData() {
       const e = expenses.find((x) => x.id === id);
       if (e) togglePaidMut.mutate({ id, paid: e.paid });
     },
-    addExpense:    (name: string, amount: number, categoryId: CategoryId = "otros") =>
-      addExpenseMut.mutate({ name, amount, categoryId }),
+    addExpense:    (name: string, amount: number, categoryId: CategoryId = "otros", dueDay?: number) =>
+      addExpenseMut.mutate({ name, amount, categoryId, dueDay }),
     removeExpense: (id: string) => removeExpenseMut.mutate(id),
-    updateExpense: (id: string, name: string, amount: number) =>
-      updateExpenseMut.mutate({ id, name, amount }),
+    updateExpense: (id: string, name: string, amount: number, dueDay?: number | null) =>
+      updateExpenseMut.mutate({ id, name, amount, dueDay }),
     setIncome:     (amount: number) => setIncomeMut.mutate(amount),
     MONTHS,
   };

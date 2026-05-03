@@ -69,7 +69,7 @@ export default function Index() {
           <div className="h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
 
           <motion.div {...fadeUp(0.35)}>
-            <AddExpenseForm onAdd={addExpense} />
+            <AddExpenseForm onAdd={(name, amount, categoryId, dueDay) => addExpense(name, amount, categoryId, dueDay)} />
           </motion.div>
 
           <motion.div {...fadeUp(0.4)}>

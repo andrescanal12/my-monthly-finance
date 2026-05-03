@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Utensils, Car, Film, Home, GraduationCap, MoreHorizontal } from "lucide-react";
+import { Plus, X, Utensils, Car, Film, Home, GraduationCap, MoreHorizontal, CalendarClock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CategoryId, CATEGORY_COLORS, CATEGORY_LABELS } from "@/hooks/useExpenseData";
 
@@ -15,7 +15,7 @@ const CATEGORY_ICONS: Record<CategoryId, any> = {
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as CategoryId[];
 
 interface AddExpenseFormProps {
-  onAdd: (name: string, amount: number, categoryId: CategoryId) => void;
+  onAdd: (name: string, amount: number, categoryId: CategoryId, dueDay?: number) => void;
 }
 
 export default function AddExpenseForm({ onAdd }: AddExpenseFormProps) {
@@ -23,13 +23,16 @@ export default function AddExpenseForm({ onAdd }: AddExpenseFormProps) {
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<CategoryId>("otros");
+  const [dueDay, setDueDay] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !amount) return;
-    onAdd(name.trim(), parseFloat(amount), category);
+    const parsedDay = dueDay ? parseInt(dueDay, 10) : undefined;
+    onAdd(name.trim(), parseFloat(amount), category, parsedDay);
     setName("");
     setAmount("");
+    setDueDay("");
     setCategory("otros");
     setOpen(false);
   };
@@ -94,20 +97,47 @@ export default function AddExpenseForm({ onAdd }: AddExpenseFormProps) {
                 className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all"
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold">
-                Importe (€)
-              </label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                step="0.01"
-                min="0"
-                className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all"
-              />
+
+            {/* Importe + Día de vencimiento en la misma fila */}
+            <div className="flex gap-3">
+              <div className="flex flex-col gap-2 flex-1">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold">
+                  Importe (€)
+                </label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  step="0.01"
+                  min="0"
+                  className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all"
+                />
+              </div>
+              <div className="flex flex-col gap-2 w-28">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold flex items-center gap-1">
+                  <CalendarClock size={10} />
+                  Vence día
+                </label>
+                <input
+                  type="number"
+                  placeholder="—"
+                  value={dueDay}
+                  onChange={(e) => setDueDay(e.target.value)}
+                  min="1"
+                  max="31"
+                  className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all text-center"
+                />
+              </div>
             </div>
+
+            {dueDay && (
+              <p className="text-[11px] text-muted-foreground/60 ml-1 -mt-2 flex items-center gap-1">
+                <CalendarClock size={10} />
+                Vence el día <strong className="text-foreground/70">{dueDay}</strong> de cada mes
+              </p>
+            )}
+
             <motion.button
               whileTap={{ scale: 0.97 }}
               type="submit"
