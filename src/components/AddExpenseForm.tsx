@@ -86,6 +86,7 @@ export default function AddExpenseForm({ onAdd }: AddExpenseFormProps) {
               </div>
             </div>
 
+            {/* Nombre */}
             <div className="flex flex-col gap-2">
               <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold">
                 Nombre del Gasto
@@ -98,9 +99,9 @@ export default function AddExpenseForm({ onAdd }: AddExpenseFormProps) {
               />
             </div>
 
-            {/* Importe + Día de vencimiento en la misma fila */}
-            <div className="flex gap-3">
-              <div className="flex flex-col gap-2 flex-1">
+            {/* Importe + Día vencimiento — grid 2 cols para no desbordar en móvil */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-2">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold">
                   Importe (€)
                 </label>
@@ -111,13 +112,13 @@ export default function AddExpenseForm({ onAdd }: AddExpenseFormProps) {
                   onChange={(e) => setAmount(e.target.value)}
                   step="0.01"
                   min="0"
-                  className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all"
+                  className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all w-full"
                 />
               </div>
-              <div className="flex flex-col gap-2 w-28">
+              <div className="flex flex-col gap-2">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold flex items-center gap-1">
                   <CalendarClock size={10} />
-                  Vence día
+                  Vence el día
                 </label>
                 <input
                   type="number"
@@ -126,7 +127,7 @@ export default function AddExpenseForm({ onAdd }: AddExpenseFormProps) {
                   onChange={(e) => setDueDay(e.target.value)}
                   min="1"
                   max="31"
-                  className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all text-center"
+                  className="bg-foreground/[0.05] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-1 focus:ring-foreground/30 transition-all text-center w-full"
                 />
               </div>
             </div>

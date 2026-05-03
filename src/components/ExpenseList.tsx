@@ -128,9 +128,9 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                       />
                     </div>
 
-                    {/* Importe + Día vencimiento en fila */}
-                    <div className="flex gap-2 items-end">
-                      <div className="flex flex-col gap-2 flex-1">
+                    {/* Importe + Día — grid para no desbordar en móvil */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-2">
                         <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold">
                           Importe (€)
                         </label>
@@ -138,42 +138,27 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                           type="number"
                           value={editAmount}
                           onChange={(e) => setEditAmount(e.target.value)}
-                          className="liquid-glass-strong rounded-xl px-4 py-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-foreground/30 transition-all placeholder:text-muted-foreground/30"
+                          className="liquid-glass-strong rounded-xl px-4 py-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-foreground/30 transition-all placeholder:text-muted-foreground/30 w-full"
                           placeholder="0.00"
                           step="0.01"
                         />
                       </div>
 
-                      <div className="flex flex-col gap-2 w-24">
+                      <div className="flex flex-col gap-2">
                         <label className="text-[10px] text-muted-foreground uppercase tracking-[1px] ml-1 font-semibold flex items-center gap-1">
                           <CalendarClock size={9} />
-                          Día
+                          Vence el día
                         </label>
                         <input
                           type="number"
                           value={editDueDay}
                           onChange={(e) => setEditDueDay(e.target.value)}
-                          className="liquid-glass-strong rounded-xl px-3 py-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-foreground/30 transition-all placeholder:text-muted-foreground/30 text-center"
+                          className="liquid-glass-strong rounded-xl px-3 py-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-foreground/30 transition-all placeholder:text-muted-foreground/30 text-center w-full"
                           placeholder="—"
                           min="1"
                           max="31"
                         />
                       </div>
-
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleUpdate(expense.id)}
-                        className="h-[44px] px-5 rounded-xl bg-foreground text-background flex items-center justify-center font-medium hover:bg-foreground/90 transition-all shadow-lg"
-                      >
-                        <Check size={18} />
-                      </motion.button>
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={cancelEditing}
-                        className="h-[44px] px-4 rounded-xl bg-foreground/[0.08] text-foreground hover:bg-foreground/[0.15] flex items-center justify-center transition-all shadow-sm"
-                      >
-                        <X size={18} strokeWidth={2.5} />
-                      </motion.button>
                     </div>
 
                     {editDueDay && (
@@ -182,6 +167,25 @@ export default function ExpenseList({ expenses, onTogglePaid, onRemove, onUpdate
                         Vence el día <strong className="text-foreground/70">{editDueDay}</strong> de cada mes
                       </p>
                     )}
+
+                    {/* Botones de acción en fila separada */}
+                    <div className="flex gap-2">
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => handleUpdate(expense.id)}
+                        className="flex-1 h-[44px] rounded-xl bg-foreground text-background flex items-center justify-center gap-2 text-sm font-semibold hover:bg-foreground/90 transition-all shadow-lg"
+                      >
+                        <Check size={16} />
+                        Guardar
+                      </motion.button>
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={cancelEditing}
+                        className="h-[44px] px-5 rounded-xl bg-foreground/[0.08] text-foreground hover:bg-foreground/[0.15] flex items-center justify-center transition-all shadow-sm"
+                      >
+                        <X size={18} strokeWidth={2.5} />
+                      </motion.button>
+                    </div>
                   </motion.div>
                 ) : (
                   <motion.div
