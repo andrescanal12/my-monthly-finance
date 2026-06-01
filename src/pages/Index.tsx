@@ -6,6 +6,7 @@ import ProgressRing from "@/components/ProgressRing";
 import ExpenseList from "@/components/ExpenseList";
 import AddExpenseForm from "@/components/AddExpenseForm";
 import IncomeEditor from "@/components/IncomeEditor";
+import BudgetWidget from "@/components/BudgetWidget";
 import { Wallet, Loader2 } from "lucide-react";
 
 const fadeUp = (delay: number) => ({
@@ -19,7 +20,7 @@ export default function Index() {
     selectedMonth, setSelectedMonth, monthData, MONTHS,
     totalExpenses, totalPaid, totalPending, freeAmount,
     togglePaid, addExpense, removeExpense, updateExpense, setIncome,
-    isLoading,
+    isLoading, expensesByCategory, budgets, setBudget
   } = useExpenseData();
 
   return (
@@ -62,6 +63,14 @@ export default function Index() {
               totalExpenses={totalExpenses}
               totalPending={totalPending}
               freeAmount={freeAmount}
+            />
+          </motion.div>
+
+          <motion.div {...fadeUp(0.3)}>
+            <BudgetWidget 
+              budgets={budgets} 
+              expensesByCategory={expensesByCategory} 
+              onSetBudget={setBudget} 
             />
           </motion.div>
 

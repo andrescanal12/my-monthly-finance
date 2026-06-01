@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Utensils, Car, Film, Home, GraduationCap, MoreHorizontal, CalendarClock } from "lucide-react";
+import { Plus, X, Utensils, Car, Film, Home, GraduationCap, MoreHorizontal, CalendarClock, Fuel } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CategoryId, CATEGORY_COLORS, CATEGORY_LABELS } from "@/hooks/useExpenseData";
 
@@ -10,6 +10,7 @@ const CATEGORY_ICONS: Record<CategoryId, any> = {
   vivienda: Home,
   educacion: GraduationCap,
   otros: MoreHorizontal,
+  gasolina: Fuel,
 };
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as CategoryId[];
