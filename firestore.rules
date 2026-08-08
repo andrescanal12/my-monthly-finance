@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      // Permitimos lectura y escritura temporalmente ya que no hay Authentication configurado
+      allow read, write: if true;
+    }
+  }
+}

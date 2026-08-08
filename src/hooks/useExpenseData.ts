@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs, onSnapshot, addDoc, deleteDoc, updateDoc, doc, setDoc, orderBy } from "firebase/firestore";
 import { toast } from "sonner";
 
 // ── FAMILY ID ─────────────────────────────────────────────
@@ -64,15 +65,17 @@ export function useExpenseData() {
   const { data: income = 1955.15 } = useQuery<number>({
     queryKey: ["income", selectedMonth],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("month_income")
-        .select("amount")
-        .eq("family_id", FAMILY_ID)
-        .eq("month_index", selectedMonth)
-        .eq("year", YEAR)
-        .single();
-      if (error && error.code !== "PGRST116") throw error;
-      return data?.amount ?? 1955.15;
+      const q = query(
+        collection(db, "month_income"),
+        where("family_id", "==", FAMILY_ID),
+        where("month_index", "==", selectedMonth),
+        where("year", "==", YEAR)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        return snapshot.docs[0].data().amount;
+      }
+      return 1955.15;
     },
   });
 
@@ -80,23 +83,26 @@ export function useExpenseData() {
   const { data: expenses = [], isLoading } = useQuery<Expense[]>({
     queryKey: ["expenses", selectedMonth],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("family_id", FAMILY_ID)
-        .eq("month_index", selectedMonth)
-        .eq("year", YEAR)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []).map((e) => ({
-        id:          e.id,
-        name:        e.name,
-        amount:      Number(e.amount),
-        paid:        e.paid,
-        isRecurring: e.is_recurring,
-        categoryId:  e.category_id as CategoryId,
-        dueDay:      e.due_day ?? undefined,
-      }));
+      const q = query(
+        collection(db, "expenses"),
+        where("family_id", "==", FAMILY_ID),
+        where("month_index", "==", selectedMonth),
+        where("year", "==", YEAR),
+        orderBy("created_at", "asc")
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id:          doc.id,
+          name:        data.name,
+          amount:      Number(data.amount),
+          paid:        data.paid,
+          isRecurring: data.is_recurring,
+          categoryId:  data.category_id as CategoryId,
+          dueDay:      data.due_day ?? undefined,
+        };
+      });
     },
   });
 
@@ -104,47 +110,45 @@ export function useExpenseData() {
   const { data: budgets = [] } = useQuery<CategoryBudget[]>({
     queryKey: ["budgets"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("category_budgets")
-        .select("category_id, amount")
-        .eq("family_id", FAMILY_ID);
-      if (error && error.code !== "PGRST116") throw error;
-      return (data ?? []).map(b => ({
-        categoryId: b.category_id as CategoryId,
-        amount: Number(b.amount),
-      }));
+      const q = query(
+        collection(db, "category_budgets"),
+        where("family_id", "==", FAMILY_ID)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          categoryId: data.category_id as CategoryId,
+          amount: Number(data.amount),
+        };
+      });
     },
   });
 
   // ── Realtime Subscription ───────────────────────────────
   useEffect(() => {
-    const channel = supabase
-      .channel("shared-updates")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "expenses" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["expenses", selectedMonth] });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "month_income" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["income", selectedMonth] });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "category_budgets" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["budgets"] });
-        }
-      )
-      .subscribe();
+    // Listen to expenses
+    const expensesQ = query(collection(db, "expenses"), where("family_id", "==", FAMILY_ID));
+    const unsubExpenses = onSnapshot(expensesQ, () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses", selectedMonth] });
+    });
+
+    // Listen to income
+    const incomeQ = query(collection(db, "month_income"), where("family_id", "==", FAMILY_ID));
+    const unsubIncome = onSnapshot(incomeQ, () => {
+      queryClient.invalidateQueries({ queryKey: ["income", selectedMonth] });
+    });
+
+    // Listen to budgets
+    const budgetsQ = query(collection(db, "category_budgets"), where("family_id", "==", FAMILY_ID));
+    const unsubBudgets = onSnapshot(budgetsQ, () => {
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubExpenses();
+      unsubIncome();
+      unsubBudgets();
     };
   }, [selectedMonth, queryClient]);
 
@@ -158,7 +162,7 @@ export function useExpenseData() {
   // ── Mutations ────────────────────────────────────────
   const addExpenseMut = useMutation({
     mutationFn: async (vars: { name: string; amount: number; categoryId: CategoryId; dueDay?: number }) => {
-      const { error } = await supabase.from("expenses").insert([{
+      await addDoc(collection(db, "expenses"), {
         family_id:    FAMILY_ID,
         name:         vars.name,
         amount:       vars.amount,
@@ -168,8 +172,8 @@ export function useExpenseData() {
         paid:         false,
         is_recurring: false,
         due_day:      vars.dueDay ?? null,
-      }]);
-      if (error) throw error;
+        created_at:   new Date().toISOString(),
+      });
     },
     onSuccess: () => { invalidate(); toast.success("Gasto añadido"); },
     onError:   (e: any) => toast.error(e.message),
@@ -177,8 +181,7 @@ export function useExpenseData() {
 
   const removeExpenseMut = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("expenses").delete().eq("id", id);
-      if (error) throw error;
+      await deleteDoc(doc(db, "expenses", id));
     },
     onSuccess: () => { invalidate(); toast.success("Gasto eliminado"); },
     onError:   (e: any) => toast.error(e.message),
@@ -186,11 +189,9 @@ export function useExpenseData() {
 
   const togglePaidMut = useMutation({
     mutationFn: async (vars: { id: string; paid: boolean }) => {
-      const { error } = await supabase
-        .from("expenses")
-        .update({ paid: !vars.paid })
-        .eq("id", vars.id);
-      if (error) throw error;
+      await updateDoc(doc(db, "expenses", vars.id), {
+        paid: !vars.paid
+      });
     },
     onSuccess: () => invalidate(),
     onError:   (e: any) => toast.error(e.message),
@@ -198,11 +199,11 @@ export function useExpenseData() {
 
   const updateExpenseMut = useMutation({
     mutationFn: async (vars: { id: string; name: string; amount: number; dueDay?: number | null }) => {
-      const { error } = await supabase
-        .from("expenses")
-        .update({ name: vars.name, amount: vars.amount, due_day: vars.dueDay ?? null })
-        .eq("id", vars.id);
-      if (error) throw error;
+      await updateDoc(doc(db, "expenses", vars.id), {
+        name: vars.name, 
+        amount: vars.amount, 
+        due_day: vars.dueDay ?? null
+      });
     },
     onSuccess: () => { invalidate(); toast.success("Gasto actualizado"); },
     onError:   (e: any) => toast.error(e.message),
@@ -210,11 +211,27 @@ export function useExpenseData() {
 
   const setIncomeMut = useMutation({
     mutationFn: async (amount: number) => {
-      const { error } = await supabase.from("month_income").upsert(
-        { family_id: FAMILY_ID, month_index: selectedMonth, year: YEAR, amount },
-        { onConflict: "family_id, month_index, year" }
+      // Find the document first
+      const q = query(
+        collection(db, "month_income"),
+        where("family_id", "==", FAMILY_ID),
+        where("month_index", "==", selectedMonth),
+        where("year", "==", YEAR)
       );
-      if (error) throw error;
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        // Update existing
+        await updateDoc(doc(db, "month_income", snapshot.docs[0].id), { amount });
+      } else {
+        // Create new
+        const newDocRef = doc(collection(db, "month_income"));
+        await setDoc(newDocRef, {
+          family_id: FAMILY_ID,
+          month_index: selectedMonth,
+          year: YEAR,
+          amount
+        });
+      }
     },
     onSuccess: () => { invalidate(); toast.success("Ingresos actualizados"); },
     onError:   (e: any) => toast.error(e.message),
@@ -222,11 +239,22 @@ export function useExpenseData() {
 
   const setBudgetMut = useMutation({
     mutationFn: async (vars: { categoryId: CategoryId; amount: number }) => {
-      const { error } = await supabase.from("category_budgets").upsert(
-        { family_id: FAMILY_ID, category_id: vars.categoryId, amount: vars.amount },
-        { onConflict: "family_id, category_id" }
+      const q = query(
+        collection(db, "category_budgets"),
+        where("family_id", "==", FAMILY_ID),
+        where("category_id", "==", vars.categoryId)
       );
-      if (error) throw error;
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        await updateDoc(doc(db, "category_budgets", snapshot.docs[0].id), { amount: vars.amount });
+      } else {
+        const newDocRef = doc(collection(db, "category_budgets"));
+        await setDoc(newDocRef, {
+          family_id: FAMILY_ID,
+          category_id: vars.categoryId,
+          amount: vars.amount
+        });
+      }
     },
     onSuccess: () => { invalidate(); toast.success("Presupuesto actualizado"); },
     onError:   (e: any) => toast.error(e.message),
@@ -237,8 +265,6 @@ export function useExpenseData() {
   const totalPaid     = expenses.filter((e) => e.paid).reduce((s, e) => s + e.amount, 0);
   const totalPending  = totalExpenses - totalPaid;
 
-  // El dinero libre resta los gastos reales, pero para las categorías con presupuesto,
-  // resta el presupuesto entero (o el gasto real si lo supera), ya que es dinero "reservado".
   const expectedTotalExpenses = (Object.keys(CATEGORY_LABELS) as CategoryId[]).reduce((sum, catId) => {
     const spent = expenses.filter((e) => e.categoryId === catId).reduce((s, e) => s + e.amount, 0);
     const budgetAmount = budgets.find(b => b.categoryId === catId)?.amount || 0;
