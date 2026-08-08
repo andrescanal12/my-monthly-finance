@@ -87,11 +87,10 @@ export function useExpenseData() {
         collection(db, "expenses"),
         where("family_id", "==", FAMILY_ID),
         where("month_index", "==", selectedMonth),
-        where("year", "==", YEAR),
-        orderBy("created_at", "asc")
+        where("year", "==", YEAR)
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map((doc) => {
+      const docs = snapshot.docs.map((doc) => {
         const data = doc.data();
         return {
           id:          doc.id,
@@ -101,7 +100,13 @@ export function useExpenseData() {
           isRecurring: data.is_recurring,
           categoryId:  data.category_id as CategoryId,
           dueDay:      data.due_day ?? undefined,
+          createdAt:   data.created_at,
         };
+      });
+      // Sort in JavaScript to avoid composite index requirement
+      return docs.sort((a, b) => {
+        if (!a.createdAt || !b.createdAt) return 0;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
     },
   });
