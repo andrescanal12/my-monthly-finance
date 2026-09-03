@@ -49,17 +49,44 @@ export default async function handler(req: any, res: any) {
     const aiData = await aiResponse.json();
     const content = aiData.choices?.[0]?.message?.content || '';
 
-    // Limpiar posibles bloques ```json ... ```
-    const cleanJson = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJson);
+    // Extraer el bloque JSON de forma segura incluso si el modelo incluye texto alrededor
+    const match = content.match(/\{[\s\S]*?\}/);
+    let parsed: any = {};
+    if (match) {
+      try {
+        parsed = JSON.parse(match[0]);
+      } catch (e) {
+        parsed = {};
+      }
+    }
+
+    // Fallbacks si falta algo
+    let name = parsed.name;
+    if (!name) {
+      name = rawText.slice(0, 30);
+    }
+
+    let categoryId = parsed.categoryId;
+    const validCategories = ['comida', 'transporte', 'ocio', 'vivienda', 'educacion', 'otros', 'gasolina'];
+    if (!validCategories.includes(categoryId)) {
+      categoryId = 'otros';
+    }
 
     const now = new Date();
     const currentMonth = now.getMonth(); // 0 a 11
     const currentYear = now.getFullYear();
     const currentDay = now.getDate();
 
-    const rawAmount = String(parsed.amount || 0).replace(/[^0-9.,]/g, '').replace(',', '.');
-    const cleanAmount = parseFloat(rawAmount) || 0;
+    let cleanAmount = 0;
+    if (parsed.amount) {
+      const raw = String(parsed.amount).replace(/[^0-9.,]/g, '').replace(',', '.');
+      cleanAmount = parseFloat(raw) || 0;
+    } else {
+      const amountMatch = String(rawText).match(/(\d+(?:[.,]\d{1,2})?)/);
+      if (amountMatch) {
+        cleanAmount = parseFloat(amountMatch[1].replace(',', '.')) || 0;
+      }
+    }
 
     // 2. Guardar directamente en Firestore REST API
     const firestoreUrl = 'https://firestore.googleapis.com/v1/projects/my-finance-ac26/databases/(default)/documents/expenses';
@@ -69,9 +96,9 @@ export default async function handler(req: any, res: any) {
       body: JSON.stringify({
         fields: {
           family_id: { stringValue: 'canal-family' },
-          name: { stringValue: String(parsed.name || 'Gasto tarjeta') },
+          name: { stringValue: String(name) },
           amount: { doubleValue: cleanAmount },
-          category_id: { stringValue: String(parsed.categoryId || 'otros') },
+          category_id: { stringValue: String(categoryId) },
           month_index: { integerValue: String(currentMonth) },
           year: { integerValue: String(currentYear) },
           paid: { booleanValue: true },
@@ -89,9 +116,9 @@ export default async function handler(req: any, res: any) {
       message: 'Gasto registrado correctamente',
       data: {
         id: savedDoc.name?.split('/').pop(),
-        name: parsed.name,
-        amount: parsed.amount,
-        categoryId: parsed.categoryId,
+        name: name,
+        amount: cleanAmount,
+        categoryId: categoryId,
         month: currentMonth,
         year: currentYear
       }
