@@ -104,7 +104,8 @@ export default async function handler(req: any, res: any) {
           paid: { booleanValue: true },
           is_recurring: { booleanValue: false },
           due_day: { integerValue: String(currentDay) },
-          created_at: { stringValue: now.toISOString() }
+          created_at: { stringValue: now.toISOString() },
+          raw_text: { stringValue: String(rawText).slice(0, 500) }
         }
       })
     });
