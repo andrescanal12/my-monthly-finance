@@ -13,8 +13,22 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ status: 'active', message: 'Webhook de gastos activo' });
   }
 
-  try {
-    const rawText = req.body?.text || req.body?.body || req.body?.message || req.body?.notification || req.query?.text;
+    let rawText = '';
+    if (typeof req.body === 'string') {
+      try {
+        const parsed = JSON.parse(req.body);
+        rawText = parsed.text || parsed.body || parsed.message || parsed.notification || req.body;
+      } catch (e) {
+        const textMatch = req.body.match(/"text"\s*:\s*"([^"]+)"/);
+        rawText = textMatch ? textMatch[1] : req.body;
+      }
+    } else if (req.body && typeof req.body === 'object') {
+      rawText = req.body.text || req.body.body || req.body.message || req.body.notification;
+    }
+    if (!rawText && req.query?.text) {
+      rawText = String(req.query.text);
+    }
+
     if (!rawText) {
       return res.status(400).json({ error: 'Falta el texto de la notificación en el body: { text: "..." }' });
     }
