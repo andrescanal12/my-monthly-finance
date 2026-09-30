@@ -47,6 +47,9 @@ export default async function handler(req: any, res: any) {
       },
       body: JSON.stringify({
         model: 'openrouter/free',
+        reasoning: { effort: 'none' },
+        temperature: 0.1,
+        max_tokens: 120,
         messages: [
           {
             role: 'system',

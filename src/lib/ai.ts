@@ -11,7 +11,54 @@ export interface AIClassifiedExpense {
   categoryId: CategoryId;
 }
 
+// Analizador ultrarrápido instantáneo (0.001s) para casos comunes
+function tryQuickMatch(text: string): AIClassifiedExpense | null {
+  const clean = text.toLowerCase();
+  
+  // Extraer cantidad (ej: 25€, 25.50, 25,50 €)
+  const amountMatch = clean.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:€|euros?|$|\s)/i);
+  if (!amountMatch) return null;
+  const amount = parseFloat(amountMatch[1].replace(",", "."));
+  if (!amount || isNaN(amount) || amount <= 0) return null;
+
+  // Comida / Supermercados
+  if (clean.includes("mercadona")) return { name: "Mercadona", amount, categoryId: "comida" };
+  if (clean.includes("carrefour")) return { name: "Carrefour", amount, categoryId: "comida" };
+  if (clean.includes("lidl")) return { name: "Lidl", amount, categoryId: "comida" };
+  if (clean.includes("consum")) return { name: "Consum", amount, categoryId: "comida" };
+  if (clean.includes("alcampo")) return { name: "Alcampo", amount, categoryId: "comida" };
+  if (clean.includes("dia") && (clean.includes("super") || clean.includes("dia "))) return { name: "Supermercado Día", amount, categoryId: "comida" };
+  if (clean.includes("aldi")) return { name: "Aldi", amount, categoryId: "comida" };
+  if (clean.includes("mcdonald")) return { name: "McDonald's", amount, categoryId: "comida" };
+  if (clean.includes("burger king")) return { name: "Burger King", amount, categoryId: "comida" };
+  if (clean.includes("kfc")) return { name: "KFC", amount, categoryId: "comida" };
+
+  // Gasolina
+  if (clean.includes("repsol")) return { name: "Repsol", amount, categoryId: "gasolina" };
+  if (clean.includes("cepsa")) return { name: "Cepsa", amount, categoryId: "gasolina" };
+  if (clean.includes("bp")) return { name: "Gasolinera BP", amount, categoryId: "gasolina" };
+  if (clean.includes("gasexpress")) return { name: "Gasexpress", amount, categoryId: "gasolina" };
+  if (clean.includes("plenoil")) return { name: "Plenoil", amount, categoryId: "gasolina" };
+  if (clean.includes("gasolina") || clean.includes("gasoil") || clean.includes("diesel")) {
+    return { name: "Gasolina", amount, categoryId: "gasolina" };
+  }
+
+  // Ocio
+  if (clean.includes("cine") || clean.includes("cinesa") || clean.includes("yelmo")) return { name: "Cine", amount, categoryId: "ocio" };
+  if (clean.includes("netflix")) return { name: "Netflix", amount, categoryId: "ocio" };
+  if (clean.includes("spotify")) return { name: "Spotify", amount, categoryId: "ocio" };
+
+  return null;
+}
+
 export async function classifyExpenseWithAI(inputText: string): Promise<AIClassifiedExpense> {
+  // 1. Intento instantáneo por reglas locales (0.001s)
+  const quickResult = tryQuickMatch(inputText);
+  if (quickResult) {
+    return quickResult;
+  }
+
+  // 2. Consulta a OpenRouter con razonamiento desactivado para máxima velocidad (1.5s)
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -22,23 +69,13 @@ export async function classifyExpenseWithAI(inputText: string): Promise<AIClassi
     },
     body: JSON.stringify({
       model: "openrouter/free",
+      reasoning: { effort: "none" },
+      temperature: 0.1,
+      max_tokens: 120,
       messages: [
         {
           role: "system",
-          content: `Eres un asistente financiero inteligente que extrae gastos de textos, mensajes hablados o notificaciones bancarias (BBVA, Wallet, etc.).
-Analiza el texto y extrae:
-1. "name": Nombre limpio y legible del comercio o concepto (ej: "Mercadona", "Repsol", "Cena italiana", "Cine"). Si no hay nombre específico, pon un nombre descriptivo.
-2. "amount": El valor numérico exacto en euros (número con decimales si aplica). Si no detectas ningún importe, devuelve 0.
-3. "categoryId": Exactamente una de estas categorías:
-   - "comida": supermercados, alimentación, restaurantes, comida a domicilio, cafeterías.
-   - "gasolina": gasolineras, combustible, Repsol, Cepsa, BP, Gasexpress, etc.
-   - "transporte": metro, autobús, taxi, parking, peajes, tren, vuelos, cuota coche, taller.
-   - "ocio": cine, streaming (Netflix, Spotify), salidas, videojuegos, ropa, compras personales.
-   - "vivienda": alquiler, hipoteca, luz, agua, internet, muebles, hogar.
-   - "educacion": cursos, máster, universidad, libros, formación.
-   - "otros": cualquier gasto que no encaje en las anteriores o transferencias genéricas.
-
-Devuelve ÚNICAMENTE un JSON válido con esta forma sin formato markdown ni texto extra:
+          content: `Eres un asistente financiero ultra rápido. Extrae y devuelve ÚNICAMENTE un JSON válido sin markdown ni razonamiento con este formato exacto:
 {"name": string, "amount": number, "categoryId": "comida"|"transporte"|"ocio"|"vivienda"|"educacion"|"otros"|"gasolina"}`
         },
         {
