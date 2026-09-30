@@ -5,6 +5,7 @@ import SummaryCards from "@/components/SummaryCards";
 import ProgressRing from "@/components/ProgressRing";
 import ExpenseList from "@/components/ExpenseList";
 import AddExpenseForm from "@/components/AddExpenseForm";
+import AddExpenseWithAI from "@/components/AddExpenseWithAI";
 import IncomeEditor from "@/components/IncomeEditor";
 import BudgetWidget from "@/components/BudgetWidget";
 import { Wallet, Loader2 } from "lucide-react";
@@ -77,7 +78,8 @@ export default function Index() {
           {/* Divider */}
           <div className="h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
 
-          <motion.div {...fadeUp(0.35)}>
+          <motion.div {...fadeUp(0.35)} className="flex flex-col gap-2.5">
+            <AddExpenseWithAI onAdd={(name, amount, categoryId, dueDay) => addExpense(name, amount, categoryId, dueDay)} />
             <AddExpenseForm onAdd={(name, amount, categoryId, dueDay) => addExpense(name, amount, categoryId, dueDay)} />
           </motion.div>
 
