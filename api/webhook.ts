@@ -33,48 +33,116 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Falta el texto de la notificación en el body: { text: "..." }' });
     }
 
-    const defaultKey = Buffer.from('c2stb3ItdjEtYTY3MmI1YTk1MzA2OWY5OWM2N2MxMWNiYmIyYzcwNzVjYzBiMDY5ZTU0MjcwZWI1ZDk0NjgwMzI0N2EwYWJkNA==', 'base64').toString('utf8');
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || defaultKey;
+    // 0. Parser ultra-rápido por Regex para notificaciones y emails de BBVA
+    const lower = rawText.toLowerCase();
 
-    // 1. Clasificar con OpenRouter (Free Models Router)
-    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://my-finance-ac26.web.app',
-        'X-Title': 'My Monthly Finance',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'openrouter/free',
-        reasoning: { effort: 'none' },
-        temperature: 0.1,
-        max_tokens: 120,
-        messages: [
-          {
-            role: 'system',
-            content: 'Eres un clasificador de notificaciones de bancos y tarjetas (BBVA, Apple Pay, etc.). Extrae y devuelve ÚNICAMENTE un JSON válido sin bloques markdown ni texto adicional con esta estructura exacta:\n{"name": string (nombre limpio del comercio/tienda), "amount": number (cantidad en euros con decimales), "categoryId": "comida"|"transporte"|"ocio"|"vivienda"|"educacion"|"otros"|"gasolina"}'
-          },
-          {
-            role: 'user',
-            content: String(rawText)
-          }
-        ]
-      })
-    });
+    // Intentar extraer importe con regex estándar de BBVA / banca española
+    // ej: "18,50 EUR", "18.50 EUR", "18,50 €", "importe de 18,50"
+    const amountMatch = rawText.match(/(?:importe\s*(?:de)?\s*:?\s*|pago\s*(?:de)?\s*:?\s*|compra\s*(?:de)?\s*:?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:EUR|€|euros)/i) ||
+                        rawText.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:EUR|€)/i);
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || '';
+    // Intentar extraer comercio común
+    let quickMerchant = '';
+    let quickCategory = '';
 
-    // Extraer el bloque JSON de forma segura incluso si el modelo incluye texto alrededor
-    const match = content.match(/\{[\s\S]*?\}/);
-    let parsed: any = {};
-    if (match) {
-      try {
-        parsed = JSON.parse(match[0]);
-      } catch (e) {
-        parsed = {};
+    const merchants: [RegExp, string, string][] = [
+      [/mercadona/i, 'Mercadona', 'comida'],
+      [/carrefour/i, 'Carrefour', 'comida'],
+      [/lidl/i, 'Lidl', 'comida'],
+      [/dia\b/i, 'Supermercado Dia', 'comida'],
+      [/aldi/i, 'Aldi', 'comida'],
+      [/alcampo/i, 'Alcampo', 'comida'],
+      [/eroski/i, 'Eroski', 'comida'],
+      [/repsol/i, 'Repsol', 'gasolina'],
+      [/cepsa/i, 'Cepsa', 'gasolina'],
+      [/bp\b/i, 'Gasolinera BP', 'gasolina'],
+      [/galp/i, 'Galp', 'gasolina'],
+      [/petroprix/i, 'Petroprix', 'gasolina'],
+      [/plenoil/i, 'Plenoil', 'gasolina'],
+      [/mcdonald/i, "McDonald's", 'ocio'],
+      [/burger\s*king/i, 'Burger King', 'ocio'],
+      [/kfc/i, 'KFC', 'ocio'],
+      [/telepizza/i, 'Telepizza', 'ocio'],
+      [/domino/i, "Domino's Pizza", 'ocio'],
+      [/starbucks/i, 'Starbucks', 'ocio'],
+      [/uber\s*eats/i, 'Uber Eats', 'ocio'],
+      [/glovo/i, 'Glovo', 'ocio'],
+      [/just\s*eat/i, 'Just Eat', 'ocio'],
+      [/zara/i, 'Zara', 'otros'],
+      [/pull\s*&?\s*bear/i, 'Pull & Bear', 'otros'],
+      [/stradivarius/i, 'Stradivarius', 'otros'],
+      [/bershka/i, 'Bershka', 'otros'],
+      [/primark/i, 'Primark', 'otros'],
+      [/amazon/i, 'Amazon', 'otros'],
+      [/ikea/i, 'IKEA', 'otros'],
+      [/leroy\s*merlin/i, 'Leroy Merlin', 'otros'],
+      [/media\s*markt/i, 'MediaMarkt', 'otros'],
+      [/metro/i, 'Metro', 'transporte'],
+      [/renfe/i, 'Renfe', 'transporte'],
+      [/uber\b/i, 'Uber', 'transporte'],
+      [/cabify/i, 'Cabify', 'transporte'],
+      [/bolt/i, 'Bolt', 'transporte'],
+    ];
+
+    for (const [pattern, mName, mCat] of merchants) {
+      if (pattern.test(rawText)) {
+        quickMerchant = mName;
+        quickCategory = mCat;
+        break;
       }
+    }
+
+    let parsed: any = {};
+
+    if (amountMatch && quickMerchant) {
+      // Coincidencia instantánea en 0.001 segundos
+      const rawNum = amountMatch[1].replace(',', '.');
+      parsed = {
+        name: quickMerchant,
+        amount: parseFloat(rawNum),
+        categoryId: quickCategory
+      };
+    } else {
+      // 1. Clasificar con OpenRouter (Free Models Router) si no hubo coincidencia directa
+      const defaultKey = Buffer.from('c2stb3ItdjEtYTY3MmI1YTk1MzA2OWY5OWM2N2MxMWNiYmIyYzcwNzVjYzBiMDY5ZTU0MjcwZWI1ZDk0NjgwMzI0N2EwYWJkNA==', 'base64').toString('utf8');
+      const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || defaultKey;
+
+      const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://my-finance-ac26.web.app',
+          'X-Title': 'My Monthly Finance',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'openrouter/free',
+          reasoning: { effort: 'none' },
+          temperature: 0.1,
+          max_tokens: 120,
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un clasificador de notificaciones y emails bancarios (BBVA, etc.). Extrae y devuelve ÚNICAMENTE un JSON válido sin markdown con esta estructura exacta:\n{"name": string (nombre limpio del comercio), "amount": number (cantidad en euros con decimales), "categoryId": "comida"|"transporte"|"ocio"|"vivienda"|"educacion"|"otros"|"gasolina"}'
+            },
+            {
+              role: 'user',
+              content: String(rawText)
+            }
+          ]
+        })
+      });
+
+      const aiData = await aiResponse.json();
+      const content = aiData.choices?.[0]?.message?.content || '';
+
+      const match = content.match(/\{[\s\S]*?\}/);
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch (e) {
+          parsed = {};
+        }
     }
 
     // Fallbacks si falta algo
