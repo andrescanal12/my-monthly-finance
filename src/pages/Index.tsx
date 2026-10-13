@@ -9,6 +9,7 @@ import ExpenseList from "@/components/ExpenseList";
 import AddExpenseForm from "@/components/AddExpenseForm";
 import AddExpenseWithAI from "@/components/AddExpenseWithAI";
 import BankStatementImporter from "@/components/BankStatementImporter";
+import OpenBankingConnect from "@/components/OpenBankingConnect";
 import IncomeEditor from "@/components/IncomeEditor";
 import BudgetWidget from "@/components/BudgetWidget";
 import { Wallet, Loader2 } from "lucide-react";
@@ -64,6 +65,11 @@ export default function Index() {
               freeAmount={freeAmount}
               monthName={monthName}
             />
+          </motion.div>
+
+          {/* 1.5. Conexión Bancaria Oficial PSD2 Open Banking */}
+          <motion.div {...fadeUp(0.12)}>
+            <OpenBankingConnect />
           </motion.div>
 
           {/* 2. Asesor de Salud Financiera con IA */}
